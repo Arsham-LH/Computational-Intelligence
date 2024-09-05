@@ -1,0 +1,155 @@
+%% Question1: a
+clc;
+load('Ex1.mat'); %Loading the data
+
+%Defining Inputs and Outputs:
+x1 = NOemission;
+x2 = speed;
+y = fuelrate;
+
+totSamps = length(x1); %Total samples in the dataset
+
+%Scattering the data:
+f = figure;
+scatter3(x1, x2, y);
+title("Data Distribution Scatter");
+xlabel("NO Emission"); ylabel("Speed"); zlabel("Fuel Rate");
+hold on; %For further scatters
+
+%% Question1: b
+clc;
+
+n = 700; %Number of Learning points
+
+train_x1 = x1(1:n);
+train_x2 = x2(1:n);
+train_y = y(1:n);
+
+val_x1 = x1(n+1:end);
+val_x2 = x2(n+1:end);
+val_y = y(n+1:end);
+
+%% Question1: c
+
+clc;
+
+A_lin = [n, sum(train_x1), sum(train_x2);
+    sum(train_x1), sum(train_x1.^2), dot(train_x1, train_x2);
+    sum(train_x2), dot(train_x1, train_x2), sum(train_x2.^2)];
+
+C_lin = [sum(train_y);
+    dot(train_x1, train_y);
+    dot(train_x2, train_y)];
+
+params_lin = linsolve(A_lin, C_lin); %linParams = [a;b;c] for the equation y = a + b*x1 + c*x2
+
+pred_y_lin = params_lin(1) + params_lin(2)*x1 + params_lin(3)*x2;
+
+%Computing MSE on training points:
+train_MSE_lin = sum((train_y - pred_y_lin(1:n)).^2) / n
+val_MSE_lin = sum((val_y - pred_y_lin(n+1:end)).^2) / (totSamps-n)
+
+% %Uncomment the following part for scattering the predicted outputs by linear regression:
+% scatter3(x1, x2, pred_y_lin);
+% legend("Main Dataset","Linear Appr.");
+%% Question1: d
+
+clc;
+
+
+Y = max(train_y) + 10;
+z = log((Y-y)./y);
+
+train_z = z(1:n);
+val_z = z(n+1:end);
+
+
+A_log = [n, sum(train_x1), sum(train_x2);
+    sum(train_x1), sum(train_x1.^2), dot(train_x1, train_x2);
+    sum(train_x2), dot(train_x1, train_x2), sum(train_x2.^2)];
+
+C_log = [sum(train_z);
+    dot(train_x1, train_z);
+    dot(train_x2, train_z)];
+
+params_log = linsolve(A_log, C_log); %linParams = [a;b;c] for the equation z = a + b*x1 + c*x2
+
+pred_z = params_log(1) + params_log(2)*x1 + params_log(3)*x2;
+pred_y_log = Y ./ (1+exp(pred_z));
+
+%Computing MSE on training points:
+train_MSE_log = sum((train_y - pred_y_log(1:n)).^2) / n
+val_MSE_log = sum((val_y - pred_y_log(n+1:totSamps)).^2) / (totSamps-n)
+
+
+% %Uncomment the following part for scattering the predicted outputs by linear regression:
+% scatter3(x1, x2, pred_y_log);
+% legend("Main Dataset","Logistic Appr.");
+
+%% Question1: e
+
+clc;
+hiddenSize = 25; %The number of neurons in the hidden layer
+trainsNum = 7; %The number of trainings for each hiddenSize
+
+train_input_mat = [train_x1; train_x2]; %input values x1, x2 for training
+input_mat = [x1; x2]; %All input values x1, x2
+
+train_perf_arr = zeros(1, hiddenSize); %Array of MSE values for training data points
+val_perf_arr = zeros(1, hiddenSize); %Array of MSE values for validation data points
+pred_y_mat = zeros(hiddenSize, totSamps); % Matrix of average predicted outputs in different values of hiddenSize
+
+for i = 1:hiddenSize
+
+    %Creating the network:
+    net = fitnet(i);
+    net.divideParam.trainRatio = 1;
+    net.divideParam.testRatio = 0;
+    net.divideParam.valRatio = 0;
+ 
+    train_tmp_perf_arr = zeros(1, length(trainsNum)); %MSE values for each training (on training data points)
+    val_tmp_perf_arr = zeros(1, length(trainsNum)); %MSE values for each training (on validation data points)
+
+    tmp_pred_y_arr = zeros(trainsNum, totSamps); %Predicted outputs for each training
+
+    for j = 1:trainsNum
+        trained_net = train(net, train_input_mat, train_y); %Training the network using training data points
+        tmp_pred_y_arr(j, :) = trained_net(input_mat); %Predicting the outputs using the network
+
+        %Computing MSE on training and validation data points:
+        train_tmp_perf_arr(j) = perform(trained_net, tmp_pred_y_arr(j, 1:n), train_y);
+        val_tmp_perf_arr(j) = perform(trained_net, tmp_pred_y_arr(j, n+1:end), val_y);
+    end
+
+    pred_y_mat(i, :) = mean(tmp_pred_y_arr, 1); %Computing average Predicted output
+
+    %Averaging MSE over different trainings:
+    train_perf_arr(i) = mean(train_tmp_perf_arr);
+    val_perf_arr(i) = mean(val_tmp_perf_arr);
+end
+
+%The best number of neurons = argmin(MSE
+finalSize = find(val_perf_arr == min(val_perf_arr));
+
+find_pred_y = pred_y_mat(finalSize, :);
+
+figure(f);
+scatter3(x1, x2, find_pred_y);
+legend("Main Dataset", "MLP Appr.");
+
+figure;
+
+subplot(211);
+plot(1:hiddenSize, train_perf_arr);
+title("MSE for Training Data");
+xlabel("Size of the Hidden Layer"); ylabel("Average MSE over " + trainsNum + " trainings");
+
+subplot(212);
+plot(1:hiddenSize, val_perf_arr);
+title("MSE for Validation Data");
+xlabel("Size of the Hidden Layer"); ylabel("Average MSE over " + trainsNum + " trainings");
+
+final_train_perf = train_perf_arr(finalSize)
+final_val_perf = val_perf_arr(finalSize)
+
+
